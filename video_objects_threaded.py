@@ -249,25 +249,32 @@ def main():
 
     # Pick the first stick to run the network
     # use the first NCS device that opens for the object detection.
+    # open as many devices as we find
     dev_count = 0
+    ncs_devices = []
+    obj_detectors = []
+    # open as many devices as detected
     for one_device in devices:
-        try:
-            obj_detect_dev = mvnc.Device(one_device)
-            obj_detect_dev.open()
-            print("opened device " + str(dev_count))
-            break;
-        except:
-            print("Could not open device " + str(dev_count) + ", trying next device")
-            pass
+        print('one device ', one_device, 'dev_count ', dev_count, 'devices ', devices) 
+        obj_detect_dev = mvnc.Device(one_device)
+        status = obj_detect_dev.open()
+        ncs_devices.append(obj_detect_dev)
+        obj_detector_proc = SsdMobileNetProcessor(NETWORK_GRAPH_FILENAME, ncs_devices, # obj_detect_dev,
+                                              inital_box_prob_thresh=min_score_percent/100.0,
+                                              classification_mask=object_classifications_mask)
+        obj_detectors.append(obj_detector_proc)
+        print("opened device " + str(dev_count), 'status ', status)
         dev_count += 1
+
+    print('ncs_devices', ncs_devices)
 
     cv2.namedWindow(cv_window_name)
     cv2.moveWindow(cv_window_name, 10,  10)
     cv2.waitKey(1)
 
-    obj_detector_proc = SsdMobileNetProcessor(NETWORK_GRAPH_FILENAME, obj_detect_dev,
-                                              inital_box_prob_thresh=min_score_percent/100.0,
-                                              classification_mask=object_classifications_mask)
+    #obj_detector_proc = SsdMobileNetProcessor(NETWORK_GRAPH_FILENAME, ncs_devices[0], # obj_detect_dev,
+     #                                         inital_box_prob_thresh=min_score_percent/100.0,
+     #                                         classification_mask=object_classifications_mask)
 
     exit_app = False
 
@@ -294,7 +301,7 @@ def main():
 #            video_proc = VideoProcessor(input_video_path + '/' + input_video_file,
 #                                         network_processor = obj_detector_proc)
         # use the video cam (0)  ***swb***
-        video_proc = VideoProcessor("output.avi",0,network_processor = obj_detector_proc)
+        video_proc = VideoProcessor(0,network_processor = obj_detectors[0]) # obj_detector_proc)
         video_proc.start_processing()
 
         frame_count = 0

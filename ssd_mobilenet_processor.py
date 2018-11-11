@@ -37,9 +37,11 @@ class SsdMobileNetProcessor:
         try:
             with open(network_graph_filename, mode='rb') as graph_file:
                 graph_in_memory = graph_file.read()
-            self._graph = mvnc.Graph("SSD MobileNet Graph")
-            self._fifo_in, self._fifo_out = self._graph.allocate_with_fifos(ncs_device, graph_in_memory)
-
+                self._graph = mvnc.Graph("SSD MobileNet Graph")
+                nnp = 0
+                for device in ncs_device:
+                    self._fifo_in, self._fifo_out = self._graph.allocate_with_fifos(ncs_device[nnp], graph_in_memory)
+                    nnp += 1
         except:
             print('\n\n')
             print('Error - could not load neural network graph file: ' + network_graph_filename)

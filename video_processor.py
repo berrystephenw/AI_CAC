@@ -18,7 +18,7 @@ class VideoProcessor:
     puts them on a queue depending on how the instance is constructed.
     """
 
-    def __init__(self, out_file:str, video_file:str, request_video_width:int=640, request_video_height:int = 480,
+    def __init__(self, video_file:str, request_video_width:int=640, request_video_height:int = 480,
                  network_processor:SsdMobileNetProcessor=None, output_queue:Queue=None, queue_put_wait_max:float = 0.01,
                  queue_full_sleep_seconds:float = 0.1):
         """Initializer for the class.
@@ -37,7 +37,6 @@ class VideoProcessor:
         """
         self._queue_full_sleep_seconds = queue_full_sleep_seconds
         self._queue_put_wait_max = queue_put_wait_max
-        self._out_file = out_file
         self._video_file = video_file
         self._request_video_width = request_video_width
         self._request_video_height = request_video_height
@@ -45,9 +44,6 @@ class VideoProcessor:
 
         # create the video device
         self._video_device = cv2.VideoCapture(self._video_file)
-        # output file 
-        fourcc = cv2.VideoWriter_fourcc(*"XVID")
-        self._out = cv2.VideoWriter(self._out_file, fourcc, 30.0, (640,480))
 
         if ((self._video_device == None) or (not self._video_device.isOpened())):
             print('\n\n')
@@ -134,12 +130,6 @@ class VideoProcessor:
         :return: None
         """
         self._pause_mode = False
-
-    def writeframe(self,frame):
-        """ Writes  the current frame to the video file
-        :return: None
-        """
-        self._out.write(frame)
 
     # Thread target.  When call start_processing and initialized with an output queue,
     # this function will be called in its own thread.  it will keep working until stop_processing is called.
