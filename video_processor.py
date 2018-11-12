@@ -23,7 +23,6 @@ class VideoProcessor:
                  queue_full_sleep_seconds:float = 0.1):
         """Initializer for the class.
 
-        :param out_file: file name of the file from which to save the video frames
         :param video_file: file name of the file from which to read video frames
         :param request_video_width: the width in pixels to request from the video device, may be ignored.
         :param request_video_height: the height in pixels to request from the video device, may be ignored.
