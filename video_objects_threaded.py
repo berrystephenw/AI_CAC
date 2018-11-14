@@ -259,9 +259,8 @@ def main():
         obj_detect_dev = mvnc.Device(one_device)
         status = obj_detect_dev.open()
         ncs_devices.append(obj_detect_dev)
-        obj_detector_proc = SsdMobileNetProcessor(NETWORK_GRAPH_FILENAME, ncs_devices, # obj_detect_dev,
-                                              inital_box_prob_thresh=min_score_percent/100.0,
-                                              classification_mask=object_classifications_mask)
+        obj_detector_proc = SsdMobileNetProcessor(NETWORK_GRAPH_FILENAME, ncs_devices[dev_count],                            inital_box_prob_thresh=min_score_percent/100.0,
+                            classification_mask=object_classifications_mask)
         obj_detectors.append(obj_detector_proc)
         print("opened device " + str(dev_count), 'status ', status)
         dev_count += 1
@@ -272,45 +271,71 @@ def main():
     cv2.moveWindow(cv_window_name, 10,  10)
     cv2.waitKey(1)
 
-    #obj_detector_proc = SsdMobileNetProcessor(NETWORK_GRAPH_FILENAME, ncs_devices[0], # obj_detect_dev,
-     #                                         inital_box_prob_thresh=min_score_percent/100.0,
-     #                                         classification_mask=object_classifications_mask)
 
     exit_app = False
 
     # output file 
-    # fourcc = cv2.VideoWriter_fourcc(*"MJPG")
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    fourcc = cv2.VideoWriter_fourcc(*"MJPG")
+    #fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    #fourcc = cv2.VideoWriter_fourcc()
     filenum = 1
     # keep the number of video files to a reasonable number in the current directory
     while (filenum < 20):
-        doesexist = os.path.isfile("output" + str(filenum) + ".mp4")
+        doesexist = os.path.isfile("output" + str(filenum) + ".avi")
         if (doesexist == False):
-            out_filename = "output" + str(filenum) + ".mp4"
+            out_filename = "output" + str(filenum) + ".avi"
             break
         filenum += 1
 
     print("Using output file name " + out_filename)
 
+    #outfile = cv2.VideoWriter(out_filename, fourcc, 11.0, (640,480))
     outfile = cv2.VideoWriter(out_filename, fourcc, 11.0, (640,480))
 
-    while (True):
-#        for input_video_file in input_video_filename_list :
+    video_file = 0
+    # create the video device
+    video_device = cv2.VideoCapture(video_file)
 
+    if ((video_device == None) or (not video_device.isOpened())):
+        print('\n\n')
+        print('Error - could not open video device.')
+        print('If you installed python opencv via pip or pip3 you')
+        print('need to uninstall it and install from source with -D WITH_V4L=ON')
+        print('Use the provided script: install-opencv-from_source.sh')
+        print('\n\n')
+        return
+
+    # Request the dimensions
+    request_video_width = 640
+    request_video_height = 480
+    video_device.set(cv2.CAP_PROP_FRAME_WIDTH, request_video_width)
+    video_device.set(cv2.CAP_PROP_FRAME_HEIGHT, request_video_height)
+
+    # save the actual dimensions
+    actual_video_width = video_device.get(cv2.CAP_PROP_FRAME_WIDTH)
+    actual_video_height = video_device.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    print('actual video resolution: ' + str(actual_video_width) + ' x ' + str(actual_video_height))
+
+
+    while (True):
         # video processor that will put video frames images on the object detector's input FIFO queue
-#            video_proc = VideoProcessor(input_video_path + '/' + input_video_file,
-#                                         network_processor = obj_detector_proc)
-        # use the video cam (0)  ***swb***
-        video_proc = VideoProcessor(0,network_processor = obj_detectors[0]) # obj_detector_proc)
-        video_proc.start_processing()
+
+        video_proc1 = VideoProcessor(network_processor = obj_detectors[0]) # obj_detector_proc)
+        # video_proc.start_processing()
+        if dev_count > 1:
+            video_proc2 = VideoProcessor(network_processor = obj_detectors[1]) # obj_detector_proc)
 
         frame_count = 0
         start_time = time.time()
         end_time = start_time
 
         while(True):
+            # Read from the video file
+            ret_val, input_image = video_device.read()
+            obj_detectors[0].start_aysnc_inference(input_image)
+            
             try:
-                (filtered_objs, display_image) = obj_detector_proc.get_async_inference_result()
+                (filtered_objs, display_image) = obj_detectors[0].get_async_inference_result()
             except :
                 print("exception caught in main")
                 raise
@@ -339,20 +364,20 @@ def main():
                 if (handle_keys(raw_key, obj_detector_proc) == False):
                     end_time = time.time()
                     exit_app = True
-                    video_proc.stop_processing()
-                    continue
+#                    video_proc.stop_processing()
+                    break
 
             frame_count += 1
 
-            if (obj_detector_proc.is_input_queue_empty()):
-                end_time = time.time()
-                print('Neural Network Processor has nothing to process, assuming video is finished.')
-                break
+#            if (obj_detectors[0].is_input_queue_empty()):
+#                end_time = time.time()
+#                print('Neural Network Processor has nothing to process, assuming video is finished.')
+#                break
 
         frames_per_second = frame_count / (end_time - start_time)
         print('Frames per Second: ' + str(frames_per_second))
 
-        throttling = obj_detect_dev.get_option(mvnc.DeviceOption.RO_THERMAL_THROTTLING_LEVEL)
+        throttling = ncs_devices[0].get_option(mvnc.DeviceOption.RO_THERMAL_THROTTLING_LEVEL)
         if (throttling > 0):
             print("\nDevice is throttling, level is: " + str(throttling))
             print("Sleeping for a few seconds....")
@@ -361,18 +386,17 @@ def main():
         #video_proc.stop_processing()
         cv2.waitKey(1)
 
-        video_proc.cleanup()
+#        video_proc.cleanup()
 
         if (exit_app):
             break
     #if (exit_app):
     #    break
 
-
     # Clean up the graph and the device
-    obj_detector_proc.cleanup()
-    obj_detect_dev.close()
-    obj_detect_dev.destroy()
+    obj_detectors[0].cleanup()
+    ncs_devices[0].close()
+    ncs_devices[0].destroy()
 
     cv2.destroyAllWindows()
     outfile.release()

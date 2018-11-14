@@ -37,14 +37,9 @@ class SsdMobileNetProcessor:
         try:
             with open(network_graph_filename, mode='rb') as graph_file:
                 graph_in_memory = graph_file.read()
-                self._graph = mvnc.Graph("SSD MobileNet Graph")
-                nnp = 0
-                for device in ncs_device:
-                    if nnp == 0:
-                        self._fifo_in_A, self._fifo_out_A = self._graph.allocate_with_fifos(ncs_device[nnp], graph_in_memory)
-                    elif nnp == 1:
-                        self._fifo_in_B, self._fifo_out_B = self._graph.allocate_with_fifos(ncs_device[nnp], graph_in_memory)
-                    nnp += 1
+            self._graph = mvnc.Graph("SSD MobileNet Graph")
+            self._fifo_in, self._fifo_out = self._graph.allocate_with_fifos(ncs_device, graph_in_memory)
+
         except:
             print('\n\n')
             print('Error - could not load neural network graph file: ' + network_graph_filename)
@@ -62,8 +57,6 @@ class SsdMobileNetProcessor:
                                          1, 1, 1, 1, 1, 1, 1]
 
         self._end_flag = True
-        self._nnp = nnp
-        self._current_device = 0
 
 
     def cleanup(self):
@@ -73,8 +66,8 @@ class SsdMobileNetProcessor:
         """
 
         self._drain_queues()
-        self._fifo_in_A.destroy()
-        self._fifo_out_A.destroy()
+        self._fifo_in.destroy()
+        self._fifo_out.destroy()
         self._graph.destroy()
 
 
@@ -119,18 +112,7 @@ class SsdMobileNetProcessor:
         inference_image = inference_image * 0.007843
 
         # Load tensor and get result.  This executes the inference on the NCS
-
-        if (self._current_device == 0):
-            self._graph.queue_inference_with_fifo_elem(self._fifo_in_A, self._fifo_out_A, inference_image.astype(numpy.float32), input_image)
-        elif (self._current_device == 1):
-            self._graph.queue_inference_with_fifo_elem(self._fifo_in_B, self._fifo_out_B, inference_image.astype(numpy.float32), input_image)
-
-        # flip the stick to use the next time through
-        if (self._nnp > 1):
-            if (self._current_device < (_nnp-1)):
-                self._current_device += 1
-            else:
-                self._current_device = 0
+        self._graph.queue_inference_with_fifo_elem(self._fifo_in, self._fifo_out, inference_image.astype(numpy.float32), input_image)
 
         return
 
@@ -162,18 +144,8 @@ class SsdMobileNetProcessor:
           float value that is the probability for the network classification 0.0 - 1.0 inclusive.
         """
 
-        # get the result from the queue(s)
-        # first we need to check to see if one of the sticks has a result ready before we block
-        countA = 0
-        countB = 0
-        countA = self._fifo_out_A.get_option(mvnc.FifoOption.RO_READ_FILL_LEVEL)
-        if self._nnp > 1:
-            countB = self._fifo_out_B.get_option(mvnc.FifoOption.RO_READ_FILL_LEVEL)
-            
-        if countA > countB or self._nnp == 1:
-            output, input_image = self._fifo_out_A.read_elem()
-        else:
-            output, input_image = self._fifo_out_B.read_elem()
+        # get the result from the queue
+        output, input_image = self._fifo_out.read_elem()
 
         # save original width and height
         input_image_width = input_image.shape[1]
@@ -189,9 +161,7 @@ class SsdMobileNetProcessor:
 
         :return: True if input queue is empty or False if not.
         """
-        count = self._fifo_in_A.get_option(mvnc.FifoOption.RO_WRITE_FILL_LEVEL)
-        if self._nnp > 1:
-            count += self._fifo_in_B.get_option(mvnc.FifoOption.RO_WRITE_FILL_LEVEL)
+        count = self._fifo_in.get_option(mvnc.FifoOption.RO_WRITE_FILL_LEVEL)
         return (count == 0)
 
 
@@ -202,20 +172,20 @@ class SsdMobileNetProcessor:
         :return: None.
         """
 
-        while (self._fifo_in_A.get_option(mvnc.FifoOption.RO_WRITE_FILL_LEVEL) != 0):
+        while (self._fifo_in.get_option(mvnc.FifoOption.RO_WRITE_FILL_LEVEL) != 0):
             # at least one item to process in the input queue, read one from output queue
             # and then loop back around
             print("input FIFO has at least one item")
-            self._fifo_out_A.read_elem()
+            self._fifo_out.read_elem()
 
-        while (self._fifo_out_A.get_option(mvnc.FifoOption.RO_READ_FILL_LEVEL) != 0):
+        while (self._fifo_out.get_option(mvnc.FifoOption.RO_READ_FILL_LEVEL) != 0):
             # output FIFO not empty so keep reading from it until it is
             print("output FIFO has at least one item")
-            self._fifo_out_A.read_elem()
+            self._fifo_out.read_elem()
 
         print ("Done Draining queues")
-        print ("Input FIFO fill level: " + str(self._fifo_in_A.get_option(mvnc.FifoOption.RO_WRITE_FILL_LEVEL)))
-        print ("Output FIFO fill level: " + str(self._fifo_out_A.get_option(mvnc.FifoOption.RO_READ_FILL_LEVEL)))
+        print ("Input FIFO fill level: " + str(self._fifo_in.get_option(mvnc.FifoOption.RO_WRITE_FILL_LEVEL)))
+        print ("Output FIFO fill level: " + str(self._fifo_out.get_option(mvnc.FifoOption.RO_READ_FILL_LEVEL)))
         return
 
 
@@ -328,4 +298,8 @@ class SsdMobileNetProcessor:
                                                 inference_result[base_index + 2] # confidence
                                                 ])
         return classes_boxes_and_probs
+
+
+
+
 

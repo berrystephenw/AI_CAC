@@ -18,14 +18,15 @@ class VideoProcessor:
     puts them on a queue depending on how the instance is constructed.
     """
 
-    def __init__(self, video_file:str, request_video_width:int=640, request_video_height:int = 480,
+    def __init__(self, request_video_width:int=640, request_video_height:int = 480,actual_video_width:int=640, actual_video_height:int = 480,
                  network_processor:SsdMobileNetProcessor=None, output_queue:Queue=None, queue_put_wait_max:float = 0.01,
                  queue_full_sleep_seconds:float = 0.1):
         """Initializer for the class.
 
-        :param video_file: file name of the file from which to read video frames
         :param request_video_width: the width in pixels to request from the video device, may be ignored.
         :param request_video_height: the height in pixels to request from the video device, may be ignored.
+        :param actual_video_width: the width in pixels of the video device, may be ignored.
+        :param actual_video_height: the height in pixels of the video device, may be ignored.
         :param network_processor: neural network processor on which we will start inferences for each frame.
         If a value is passed
         for this parameter then the output_queue, queue_put_wait_max, and queue_full_sleep_seconds will be ignored
@@ -36,32 +37,11 @@ class VideoProcessor:
         """
         self._queue_full_sleep_seconds = queue_full_sleep_seconds
         self._queue_put_wait_max = queue_put_wait_max
-        self._video_file = video_file
         self._request_video_width = request_video_width
         self._request_video_height = request_video_height
         self._pause_mode = False
-
-        # create the video device
-        self._video_device = cv2.VideoCapture(self._video_file)
-
-        if ((self._video_device == None) or (not self._video_device.isOpened())):
-            print('\n\n')
-            print('Error - could not open video device.')
-            print('If you installed python opencv via pip or pip3 you')
-            print('need to uninstall it and install from source with -D WITH_V4L=ON')
-            print('Use the provided script: install-opencv-from_source.sh')
-            print('\n\n')
-            return
-
-        # Request the dimensions
-        self._video_device.set(cv2.CAP_PROP_FRAME_WIDTH, self._request_video_width)
-        self._video_device.set(cv2.CAP_PROP_FRAME_HEIGHT, self._request_video_height)
-
-        # save the actual dimensions
-        self._actual_video_width = self._video_device.get(cv2.CAP_PROP_FRAME_WIDTH)
-        self._actual_video_height = self._video_device.get(cv2.CAP_PROP_FRAME_HEIGHT)
-        print('actual video resolution: ' + str(self._actual_video_width) + ' x ' + str(self._actual_video_height))
-
+        self._actual_video_width = actual_video_width
+        self._actual_video_height = actual_video_height
         self._output_queue = output_queue
         self._network_processor = network_processor
 
@@ -129,6 +109,12 @@ class VideoProcessor:
         :return: None
         """
         self._pause_mode = False
+
+    def writeframe(self,frame):
+        """ Writes  the current frame to the video file
+        :return: None
+        """
+        self._out.write(frame)
 
     # Thread target.  When call start_processing and initialized with an output queue,
     # this function will be called in its own thread.  it will keep working until stop_processing is called.
